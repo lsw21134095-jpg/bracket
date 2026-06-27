@@ -1,110 +1,191 @@
-def play_score_match(match_name, p1, p2):
-    """점수를 입력받아 승자와 패자, 득점을 반환하는 함수"""
-    print(f"\n▶ [{match_name}] {p1} 🆚 {p2}")
-    while True:
-        try:
-            # "6 4"와 같이 띄어쓰기로 점수 입력
-            score = input(f"👉 {p1}와(과) {p2}의 획득 게임 수를 입력하세요 (예: 6 4) : ").split()
-            if len(score) != 2:
-                raise ValueError
+import streamlit as st
+
+st.set_page_config(page_title="8인 테니스 대회 관리 시스템", page_icon="🎾", layout="wide")
+
+st.title("🎾 8인 테니스 단식 대회 자동 관리 시스템")
+
+# 1. 웹 메모장(session_state) 초기화 - 새로고침되어도 데이터 유지
+if 'step' not in st.session_state:
+    st.session_state.step = 1  # 1: 선수등록, 2: 예선진행, 3: 본선토너먼트, 4: 최종결과
+if 'players' not in st.session_state:
+    st.session_state.players = {'1조': [], '2조': [], '3조': []}
+if 'group_results' not in st.session_state:
+    st.session_state.group_results = {}
+if 'match_results' not in st.session_state:
+    st.session_state.match_results = {}
+
+# --- [1단계: 선수 명단 등록] ---
+if st.session_state.step == 1:
+    st.header("📋 1단계: 조별 선수 명단 등록")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("1조 (3명)")
+        p1 = st.text_input("1조 1번 선수", value="선수A")
+        p2 = st.text_input("1조 2번 선수", value="선수B")
+        p3 = st.text_input("1조 3번 선수", value="선수C")
+        
+    with col2:
+        st.subheader("2조 (3명)")
+        p4 = st.text_input("2조 1번 선수", value="선수D")
+        p5 = st.text_input("2조 2번 선수", value="선수E")
+        p6 = st.text_input("2조 3번 선수", value="선수F")
+        
+    with col3:
+        st.subheader("3조 (2명)")
+        p7 = st.text_input("3조 1번 선수", value="선수G")
+        p8 = st.text_input("3조 2번 선수", value="선수H")
+        
+    if st.button("선수 등록 완료 ➡️ 예선전 진행"):
+        st.session_state.players['1조'] = [p1, p2, p3]
+        st.session_state.players['2조'] = [p4, p5, p6]
+        st.session_state.players['3조'] = [p7, p8]
+        st.session_state.step = 2
+        st.rerun()
+
+# --- [2단계: 조별 예선전 점수 입력] ---
+elif st.session_state.step == 2:
+    st.header("📊 2단계: 조별 예선전 결과 입력")
+    st.write("각 경기의 획득 게임 수를 입력해 주세요.")
+    
+    # 예선 대진표 구성
+    group_matches = {
+        '1조': [('1조 1경기', st.session_state.players['1조'][0], st.session_state.players['1조'][1]),
+                ('1조 2경기', st.session_state.players['1조'][1], st.session_state.players['1조'][2]),
+                ('1조 3경기', st.session_state.players['1조'][0], st.session_state.players['1조'][2])],
+        '2조': [('2조 1경기', st.session_state.players['2조'][0], st.session_state.players['2조'][1]),
+                ('2조 2경기', st.session_state.players['2조'][1], st.session_state.players['2조'][2]),
+                ('2조 3경기', st.session_state.players['2조'][0], st.session_state.players['2조'][2])],
+        '3조': [('3조 1경기', st.session_state.players['3조'][0], st.session_state.players['3조'][1])]
+    }
+    
+    scores_input = {}
+    
+    # 화면을 3개 조로 분할 표시
+    cols = st.columns(3)
+    for idx, (g_name, matches) in enumerate(group_matches.items()):
+        with cols[idx]:
+            st.subheader(f"🔹 {g_name}")
+            for m_key, p1, p2 in matches:
+                st.write(f"▶ {p1} 🆚 {p2}")
+                s1 = st.number_input(f"{p1} 게임 수", min_value=0, max_value=10, value=6, key=f"{m_key}_s1")
+                s2 = st.number_input(f"{p2} 게임 수", min_value=0, max_value=10, value=4, key=f"{m_key}_s2")
+                scores_input[m_key] = (p1, p2, s1, s2)
+                st.markdown("---")
+                
+    if st.button("예선 결과 계산 ➡️ 8강 토너먼트 진출"):
+        # 순위 계산 로직
+        for g_name in ['1조', '2조', '3조']:
+            stats = {p: {'wins': 0, 'diff': 0} for p in st.session_state.players[g_name]}
             
-            s1, s2 = int(score[0]), int(score[1])
+            for m_key, p1, p2 in group_matches[g_name]:
+                _, _, s1, s2 = scores_input[m_key]
+                if s1 > s2:
+                    stats[p1]['wins'] += 1
+                    stats[p1]['diff'] += (s1 - s2)
+                    stats[p2]['diff'] += (s2 - s1)
+                else:
+                    stats[p2]['wins'] += 1
+                    stats[p2]['diff'] += (s2 - s1)
+                    stats[p1]['diff'] += (s1 - s2)
+                    
+            # 가나다순이 아닌 다승 및 득실차 순 정렬
+            ranked = sorted(st.session_state.players[g_name], key=lambda p: (stats[p]['wins'], stats[p]['diff']), reverse=True)
+            st.session_state.group_results[g_name] = ranked
             
-            if s1 > s2:
-                print(f"🎉 {p1} 승리! ({s1}:{s2})")
-                return p1, p2, s1, s2
-            elif s2 > s1:
-                print(f"🎉 {p2} 승리! ({s2}:{s1})")
-                return p2, p1, s2, s1
-            else:
-                print("⚠️ 테니스에는 무승부가 없습니다. 점수를 다시 입력해주세요.")
-        except ValueError:
-            print("⚠️ 올바른 형식으로 점수를 띄어쓰기로 구분하여 입력해주세요 (예: 6 4).")
+        st.session_state.step = 3
+        st.rerun()
 
-def rank_group(group_name, players):
-    """조별 예선전을 진행하고 순위를 반환하는 함수"""
-    print(f"\n" + "="*40)
-    print(f"📋 [{group_name} 예선전 진행]")
-    print("="*40)
+# --- [3단계: 본선 토너먼트 (8강, 4강, 결승)] ---
+elif st.session_state.step == 3:
+    st.header("🏆 3단계: 본선 토너먼트")
     
-    # 선수별 성적 기록 딕셔너리 (승수, 게임 득실차)
-    stats = {p: {'wins': 0, 'diff': 0} for p in players}
+    g1 = st.session_state.group_results['1조']
+    g2 = st.session_state.group_results['2조']
+    g3 = st.session_state.group_results['3조']
     
-    # 3명이면 풀리그(3경기), 2명이면 맞대결(1경기)
-    matches = [(0, 1), (1, 2), (0, 2)] if len(players) == 3 else [(0, 1)]
+    st.subheader("🎯 8강전 대진 및 결과 입력")
+    c1, c2, c3, c4 = st.columns(4)
     
-    for i, j in matches:
-        p1, p2 = players[i], players[j]
-        winner, loser, win_score, lose_score = play_score_match(f"{group_name} 예선", p1, p2)
+    with c1:
+        st.write(f"1경기: {g1[0]} (1조1위) 🆚 {g3[1]} (3조2위)")
+        qf1_s1 = st.number_input(f"{g1[0]} 점수", min_value=0, value=6, key="qf1_1")
+        qf1_s2 = st.number_input(f"{g3[1]} 점수", min_value=0, value=4, key="qf1_2")
+        qf1_w = g1[0] if qf1_s1 > qf1_s2 else g3[1]
         
-        # 승자/패자 스탯 업데이트
-        stats[winner]['wins'] += 1
-        stats[winner]['diff'] += (win_score - lose_score)
-        stats[loser]['diff'] += (lose_score - win_score)
+    with c2:
+        st.write(f"2경기: {g2[0]} (2조1위) 🆚 {g1[1]} (1조2위)")
+        qf2_s1 = st.number_input(f"{g2[0]} 점수", min_value=0, value=6, key="qf2_1")
+        qf2_s2 = st.number_input(f"{g1[1]} 점수", min_value=0, value=4, key="qf2_2")
+        qf2_w = g2[0] if qf2_s1 > qf2_s2 else g1[1]
         
-    # 순위 정렬: 1순위(다승), 2순위(득실차 높은 순)
-    ranked = sorted(players, key=lambda p: (stats[p]['wins'], stats[p]['diff']), reverse=True)
-    
-    print(f"\n📊 [{group_name} 최종 순위 결과]")
-    for idx, p in enumerate(ranked):
-        print(f"{idx+1}위: {p} (승리: {stats[p]['wins']}, 득실차: {stats[p]['diff']})")
+    with c3:
+        st.write(f"3경기: {g1[2]} (1조3위) 🆚 {g2[2]} (2조3위)")
+        qf3_s1 = st.number_input(f"{g1[2]} 점수", min_value=0, value=6, key="qf3_1")
+        qf3_s2 = st.number_input(f"{g2[2]} 점수", min_value=0, value=4, key="qf3_2")
+        qf3_w = g1[2] if qf3_s1 > qf3_s2 else g2[2]
         
-    return ranked
+    with c4:
+        st.write(f"4경기: {g2[1]} (2조2위) 🆚 {g3[0]} (3조1위)")
+        qf4_s1 = st.number_input(f"{g2[1]} 점수", min_value=0, value=6, key="qf4_1")
+        qf4_s2 = st.number_input(f"{g3[0]} 점수", min_value=0, value=4, key="qf4_2")
+        qf4_w = g2[1] if qf4_s1 > qf4_s2 else g3[0]
 
-def main():
-    print("="*50)
-    print("🎾 8인 테니스 단식 대회 자동 관리 프로그램 🎾")
-    print("="*50)
-
-    # 1. 선수 명단 입력
-    print("\n[1단계: 조별 선수 명단 등록]")
-    g1_players = [input(f"1조 {i}번 선수 이름: ") for i in range(1, 4)]
-    print("-" * 20)
-    g2_players = [input(f"2조 {i}번 선수 이름: ") for i in range(1, 4)]
-    print("-" * 20)
-    g3_players = [input(f"3조 {i}번 선수 이름: ") for i in range(1, 3)]
-
-    # 2. 조별 예선 진행 및 순위 자동 계산
-    g1_ranked = rank_group("1조", g1_players)
-    g2_ranked = rank_group("2조", g2_players)
-    g3_ranked = rank_group("3조", g3_players)
-
-    # 3. 본선 8강 진행
-    print("\n" + "="*50)
-    print("🏆 [본선 8강전 토너먼트 시작]")
-    print("="*50)
+    st.markdown("---")
+    st.subheader("🔥 4강전 결과 입력")
+    col_sf1, col_sf2 = st.columns(2)
     
-    qf1_w, _, _, _ = play_score_match("8강 1경기", g1_ranked[0], g3_ranked[1]) # 1조 1위 vs 3조 2위
-    qf2_w, _, _, _ = play_score_match("8강 2경기", g2_ranked[0], g1_ranked[1]) # 2조 1위 vs 1조 2위
-    qf3_w, _, _, _ = play_score_match("8강 3경기", g1_ranked[2], g2_ranked[2]) # 1조 3위 vs 2조 3위
-    qf4_w, _, _, _ = play_score_match("8강 4경기", g2_ranked[1], g3_ranked[0]) # 2조 2위 vs 3조 1위
+    with col_sf1:
+        st.write(f"4강 1경기: {qf1_w} 🆚 {qf3_w}")
+        sf1_s1 = st.number_input(f"{qf1_w} 점수", min_value=0, value=6, key="sf1_1")
+        sf2_s2 = st.number_input(f"{qf3_w} 점수", min_value=0, value=4, key="sf1_2")
+        sf1_w = qf1_w if sf1_s1 > sf2_s2 else qf3_w
+        sf1_l = qf3_w if sf1_s1 > sf2_s2 else qf1_w
+        
+    with col_sf2:
+        st.write(f"4강 2경기: {qf2_w} 🆚 {qf4_w}")
+        sf2_s1 = st.number_input(f"{qf2_w} 점수", min_value=0, value=6, key="sf2_1")
+        sf2_s2 = st.number_input(f"{qf4_w} 점수", min_value=0, value=4, key="sf2_2")
+        sf2_w = qf2_w if sf2_s1 > sf2_s2 else qf4_w
+        sf2_l = qf4_w if sf2_s1 > sf2_s2 else qf2_w
 
-    # 4. 본선 4강 진행
-    print("\n" + "="*50)
-    print("🔥 [본선 4강전 시작]")
-    print("="*50)
+    st.markdown("---")
+    st.subheader("👑 결승전 및 3·4위전 결과 입력")
+    col_f, col_34 = st.columns(2)
     
-    sf1_w, sf1_l, _, _ = play_score_match("4강 1경기", qf1_w, qf3_w)
-    sf2_w, sf2_l, _, _ = play_score_match("4강 2경기", qf2_w, qf4_w)
+    with col_34:
+        st.write(f"🥉 3·4위전: {sf1_l} 🆚 {sf2_l}")
+        t_s1 = st.number_input(f"{sf1_l} 점수", min_value=0, value=6, key="t_1")
+        t_s2 = st.number_input(f"{sf2_l} 점수", min_value=0, value=4, key="t_2")
+        third_place = sf1_l if t_s1 > t_s2 else sf2_l
+        fourth_place = sf2_l if t_s1 > t_s2 else sf1_l
+        
+    with col_f:
+        st.write(f"🥇 결승전: {sf1_w} 🆚 {sf2_w}")
+        f_s1 = st.number_input(f"{sf1_w} 점수", min_value=0, value=6, key="f_1")
+        f_s2 = st.number_input(f"{sf2_w} 점수", min_value=0, value=4, key="f_2")
+        winner = sf1_w if f_s1 > f_s2 else sf2_w
+        runner_up = sf2_w if f_s1 > f_s2 else sf1_w
 
-    # 5. 3·4위전 및 결승전 진행
-    print("\n" + "="*50)
-    print("👑 [순위 결정전 및 결승전 시작]")
-    print("="*50)
+    if st.button("대회 종료 ➡️ 최종 결과 보기"):
+        st.session_state.match_results = {
+            '1위': winner, '2위': runner_up, '3위': third_place, '4위': fourth_place
+        }
+        st.session_state.step = 4
+        st.rerun()
+
+# --- [4단계: 최종 결과 출력 및 리셋] ---
+elif st.session_state.step == 4:
+    st.balloons()
+    st.header("🎊 [대회 최종 결과] 🎊")
     
-    third_w, third_l, _, _ = play_score_match("3·4위전", sf1_l, sf2_l)
-    final_w, final_l, _, _ = play_score_match("결승전", sf1_w, sf2_w)
-
-    # 6. 최종 결과 출력
-    print("\n" + "="*50)
-    print("🎊 [대회 최종 결과] 🎊")
-    print("="*50)
-    print(f"🥇 우승   : {final_w}")
-    print(f"🥈 준우승 : {final_l}")
-    print(f"🥉 3위    : {third_w}")
-    print(f"🎖️ 4위    : {third_l}")
-    print("="*50)
-    print("수고하셨습니다! 대회가 종료되었습니다.")
-
-if __name__ == "__main__":
-    main()
+    res = st.session_state.match_results
+    st.markdown(f"### 🥇 우승 : {res['1위']}")
+    st.markdown(f"### 🥈 준우승 : {res['2위']}")
+    st.markdown(f"### 🥉 3위 : {res['3위']}")
+    st.markdown(f"### 🎖️ 4위 : {res['4위']}")
+    
+    if st.button("새 대회 시작하기 (처음으로)"):
+        st.session_state.clear()
+        st.rerun()
