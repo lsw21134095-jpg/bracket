@@ -171,7 +171,18 @@ elif st.session_state.step == 3:
 
     st.markdown("---")
     st.subheader("👑 순위 결정전 및 결승전")
+   # 👑 순위 결정전 및 결승전 영역 전체 교체
     col_34, col_f = st.columns(2)
     with col_34:
         st.markdown(f"**🥉 3·4위전**\n\n{sf1_l} 🆚 {sf2_l}")
-        t_s1 = st.number_input(f"{sf1_l} 점수 ",
+        t_s1 = st.number_input(f"{sf1_l} 점수 ", min_value=0, value=6, key="t_s1")
+        t_s2 = st.number_input(f"{sf2_l} 점수 ", min_value=0, value=4, key="t_s2")
+        third_place = sf1_l if t_s1 > t_s2 else sf2_l
+        fourth_place = sf2_l if t_s1 > t_s2 else sf1_l
+        
+    with col_f:
+        st.markdown(f"**🥇 결승전**\n\n{sf1_w} 🆚 {sf2_w}")
+        f_s1 = st.number_input(f"{sf1_w} 점수 ", min_value=0, value=6, key="f_s1")
+        f_s2 = st.number_input(f"{sf2_w} 점수 ", min_value=0, value=4, key="f_s2")
+        winner = sf1_w if f_s1 > f_s2 else sf2_w
+        runner_up = sf2_w if f_s1 > f_s2 else sf1_w
